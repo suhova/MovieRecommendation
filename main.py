@@ -1,28 +1,29 @@
+import json
+import math
+
 import numpy as np
 import pandas as pd
-import math
-import json
 
-def recomendation(dat, dat33):
+
+def recomendation(dat, dat33, n=4):
     data = dat.copy()
     data33 = dat33.copy()
     user33 = data33.values[0]
-    sqrtu2 = np.around(np.sqrt(np.sum([rating ** 2 for rating in list(filter(lambda rating: rating != -1, user33))])),
-                       3)
     ru = np.around(np.mean([rating for rating in list(filter(lambda rating: rating != -1, user33))]), 3)
     sim = []
     data['user'] = data.index
+
     for user in data.values:
-        sumuv = np.sum(
-            [u * v for u, v in
-             list(filter(lambda rating: rating[0] != -1 and rating[1] != -1, zip(user33, user[:-1])))])
-        sqrtv = np.around(np.sqrt(np.sum([v ** 2 for v in list(filter(lambda rating: rating != -1, user[:-1]))])), 3)
-        simuv = np.around(sumuv / (sqrtv * sqrtu2), 3)
-        rv = np.around(np.mean([rating for rating in list(filter(lambda rating: rating != -1, user[:-1]))]), 3)
+        viewedFilms = list(filter(lambda rating: rating[0] != -1 and rating[1] != -1, zip(user33, user[:-1])))
+        sumuv = np.sum([u * v for u, v in viewedFilms])
+        sqrtv = np.sqrt(np.sum([v ** 2 for u, v in viewedFilms]))
+        sqrtu = np.sqrt(np.sum([u ** 2 for u, v in viewedFilms]))
+        simuv = np.around(sumuv / (sqrtv * sqrtu), 3)
+        rv = np.around(np.mean([v for u, v in viewedFilms]), 3)
         sim.append((user[-1], simuv, rv))
     sim = [num for num in sim if not (math.isnan(num[1]) | math.isnan(num[2]))]
     sim.sort(key=lambda x: x[1], reverse=True)
-    sim = sim[1:5]
+    sim = sim[1:n+1]
     knn = pd.DataFrame(sim)
     knn = data.merge(knn, left_on='user', right_on=0, how='inner')
     knn.rename(columns={1: 'sim', 2: 'rv'}, inplace=True)
@@ -32,10 +33,13 @@ def recomendation(dat, dat33):
         users = knn[knn[movie] != -1]
         if len(users) != 0:
             sumsim = np.sum(np.abs(users['sim']))
-            sum = np.around(users['sim'] * (users[movie] - users['rv']), 3)
+            sum = np.sum(users['sim'] * (users[movie] - users['rv']))
+            prediction = np.around(sum / sumsim + ru, 3)
+            if prediction < 1:
+                prediction = 1
             result.append((
                 str.lower(movie),
-                np.around(np.sum(sum) / sumsim + ru, 3)
+                prediction
             ))
     return result
 
@@ -60,7 +64,7 @@ merged = context_day.merge(context_place, left_index=True, right_index=True, how
 for movie in allMovies:
     merged.loc[~merged[movie + "_x"].isin([" Sat", " Sun"]), movie] = -1
     merged.loc[merged[movie + "_y"] != " h", movie] = -1
-res2 = pd.DataFrame(recomendation(merged[allMovies], data33))
+res2 = pd.DataFrame(recomendation(merged[allMovies], data33, 30))
 r = np.around(np.mean([rating for rating in list(filter(lambda rating: rating != -1, data33.values[0]))]), 3)
 res2 = res2[(res2[1] >= r)].values
 result2 = {}
@@ -73,4 +77,4 @@ result = {"user": 33,
           "2": result2
           }
 with open('result.json', 'w') as f:
-    json.dump(result, f, indent = 10)
+    json.dump(result, f, indent=10)
