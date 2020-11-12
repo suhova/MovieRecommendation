@@ -3,7 +3,8 @@ import math
 
 import numpy as np
 import pandas as pd
-
+import requests
+from SPARQLWrapper import SPARQLWrapper, JSON
 
 def recommendation(dat, userDat, n=4, unseen=-1, minRating=1, accuracy=3):
     data = dat.copy()
@@ -18,8 +19,15 @@ def recommendation(dat, userDat, n=4, unseen=-1, minRating=1, accuracy=3):
         sumuv = np.sum([u * v for u, v in viewedFilms])
         sqrtUser = np.sqrt(np.sum([v ** 2 for u, v in viewedFilms]))
         sqrtPredictUser = np.sqrt(np.sum([u ** 2 for u, v in viewedFilms]))
-        simUsers = sumuv / (sqrtUser * sqrtPredictUser)
-        mean = np.mean([v for v in list(filter(lambda rating: rating != unseen, user[:-1]))])
+        if (sqrtUser * sqrtPredictUser) == 0:
+            simUsers = 0
+        else:
+            simUsers = sumuv / (sqrtUser * sqrtPredictUser)
+        userSlice = [v for v in list(filter(lambda rating: rating != unseen, user[:-1]))]
+        if len(userSlice) == 0:
+            mean = 0
+        else:
+            mean = np.mean(userSlice)
         sim.append((user[-1], np.round(simUsers, accuracy), np.round(mean, accuracy)))
     sim = [num for num in sim if not (math.isnan(num[1]) | math.isnan(num[2]))]
     knn = pd.DataFrame(sim)
@@ -79,10 +87,79 @@ def writeJson(userNum, firstTaskResult, secondTaskResult, fileName='result.json'
         json.dump(result, f, indent=10)
 
 
-data = pd.read_csv('data.csv', delimiter=', ', index_col=0)
-contextDay = pd.read_csv('context_day.csv', delimiter=', ', index_col=0)
-contextPlace = pd.read_csv('context_place.csv', delimiter=', ', index_col=0)
+def getMovieId(movieName):
+    API_ENDPOINT = "https://www.wikidata.org/w/api.php"
+    params = {
+        'action': 'wbsearchentities',
+        'format': 'json',
+        'language': 'en',
+        'search': movieName
+    }
+    res = requests.get(API_ENDPOINT, params=params)
+    res.json()['search'][0]['description']
+    sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
+    sparql_query = """ SELECT $movie
+          WHERE {
+              ?movie wdt:P31 wd:Q11424;
+                     wdt:P1476 ?title filter regex(?title,\"""" + movieName + """\",'i').
+          }
+    """
+    sparql.setQuery(sparql_query)
+    sparql.setReturnFormat(JSON)
+    results = sparql.query().convert()
+    return results['results']['bindings'][0]['movie']['value']
+
+
+def sparqlSelect(movieName):
+    API_ENDPOINT = "https://www.wikidata.org/w/api.php"
+    params = {
+        'action': 'wbsearchentities',
+        'format': 'json',
+        'language': 'en',
+        'search': movieName
+    }
+    res = requests.get(API_ENDPOINT, params=params)
+    res.json()['search'][0]['description']
+    sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
+
+    # movieId = getMovieId(movieName)
+    movieId = "http://www.wikidata.org/entity/Q25188"
+    movieId = movieId[movieId.rfind('/', 0, len(movieId)) + 1:]
+    sparql_query = """ 
+    SELECT ?actor ?actorLabel
+WHERE{
+  {SELECT ?actor (MIN(?pubdate) as ?minPubdate)
+          WHERE {
+            ?movie wdt:P161 ?actor filter(?movie = wd:""" + movieId + """).
+            ?film wdt:P161 ?actor;
+                  wdt:P577 ?pubdate.
+          }
+   GROUP BY ?actor
+}
+  ?firstFilm wdt:P577 ?date filter(?firstFilm = wd:""" + movieId + """)
+             filter(?date = ?minPubdate).
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+}
+    """
+    sparql.setQuery(sparql_query)
+    sparql.setReturnFormat(JSON)
+    results = sparql.query().convert()
+    return results['results']['bindings']
+
+
+data = pd.read_csv('hw21/data.csv', delimiter=', ', engine='python', index_col=0)
+contextDay = pd.read_csv('hw21/context_day.csv', delimiter=', ', engine='python', index_col=0)
+contextPlace = pd.read_csv('hw21/context_place.csv', delimiter=', ', engine='python', index_col=0)
+movieNames = pd.read_csv('hw21/movie_names.csv', delimiter=', ', engine='python', index_col=0)
 variant = 33
 knn = 4
 userName = 'User ' + str(variant)
-writeJson(variant, firstTask(data, userName, knn), secondTask(data, contextDay, contextPlace, userName, 15))
+
+firstTaskResult = firstTask(data, userName, knn)
+secondTaskResult = secondTask(data, contextDay, contextPlace, userName, 15)
+writeJson(variant, firstTaskResult, secondTaskResult)
+
+for film in secondTaskResult:
+    actors = sparqlSelect(list(movieNames[movieNames.index == film])[0])
+    for actor in actors:
+        print('Link: ' + actor['actor']['value'] + ' Name: ' + actor['actorLabel']['value'])
