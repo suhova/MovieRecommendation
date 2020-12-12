@@ -126,4 +126,4 @@ def GA(maxNoResultIterations=5, iter=20):
 result = GA()
 print(grade(result))
 print(result)
-result.to_csv('result.csv', index=False)
+result.to_csv('result42.csv', index=False)
