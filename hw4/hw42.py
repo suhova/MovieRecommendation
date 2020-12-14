@@ -6,6 +6,7 @@
 # 5.3 замена своих родителей
 
 import random
+
 import numpy as np
 import pandas as pd
 
@@ -18,7 +19,6 @@ data['w'] = data.index
 countOfItems = len(data)
 initialPopulation = 200
 data.index = np.arange(countOfItems, dtype=object)
-np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 
 
 def isItemFitInBackpack(df):
@@ -110,8 +110,9 @@ def GA(maxNoResultIterations=5, iter=20, populationSize=200):
                 newGeneration.append(child2)
             else:
                 newGeneration.append(father)
-        z = list(np.insert(notBest, np.arange(len(newGeneration)), newGeneration))
-        population = mutation(z)
+        populationBeforeMutation = [newGeneration, notBest]
+        population = [item for sublist in populationBeforeMutation for item in sublist]
+        population = mutation(population)
         newGr = generationGrade(population)
         if 0.3 * initialPopulation > abs(oldGr - newGr):
             maxNoResultIterations -= 1
