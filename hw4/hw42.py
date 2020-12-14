@@ -40,12 +40,6 @@ def createIndividual():
     return rndIndividual
 
 
-def chooseBestItems(arr, percent=0.2):
-    size = round(len(arr) * percent)
-    arr.sort(key=lambda df: grade(df), reverse=True)
-    return arr[0:size], arr[size:len(arr)]
-
-
 def crossingOver(mother, father):
     maxSize = max(len(mother), len(father))
     rndList = [random.randint(0, 1) for _ in range(0, maxSize)]
@@ -92,11 +86,15 @@ def addRandomItem(df):
     return df
 
 
-def GA(maxNoResultIterations=5, iter=20):
+def GA(maxNoResultIterations=5, iter=20, populationSize=200):
     population = createInitialPopulation()
     oldGr = generationGrade(population)
+    sizeOf20percents = round(populationSize * 0.2)
     while maxNoResultIterations != 0 and iter != 0:
-        best, notBest = chooseBestItems(population)
+        population.sort(key=lambda df: grade(df), reverse=True)
+        best = population[0:sizeOf20percents]
+        notBest = population[sizeOf20percents:len(population)]
+
         newGeneration = list()
         while len(best) > 0:
             random.shuffle(best)
@@ -119,11 +117,16 @@ def GA(maxNoResultIterations=5, iter=20):
             maxNoResultIterations -= 1
         iter -= 1
         oldGr = newGr
-    res, _ = chooseBestItems(population)
-    return res[0]
+    population.sort(key=lambda df: grade(df), reverse=True)
+    return population[0]
 
 
 result = GA()
 print(grade(result))
 print(result)
-result.to_csv('result42.csv', index=False)
+fileName = 'result42.csv'
+with open(fileName, 'w') as f:
+    f.write(" sum(W): " + str(sum(result['w'])) + "\n")
+    f.write(" sum(V): " + str(sum(result['v'])) + "\n")
+    f.write(" sum(C): " + str(sum(result['c'])) + "\n")
+    f.write(str(result))
